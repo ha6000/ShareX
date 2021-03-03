@@ -413,23 +413,36 @@ namespace ShareX.HelpersLib
         }
 
         // Example: "TopLeft" becomes "Top left"
-        public static string GetProperName(string name)
+        // Example2: "Rotate180" becomes "Rotate 180"
+        public static string GetProperName(string name, bool keepCase = false)
         {
             StringBuilder sb = new StringBuilder();
+
+            bool number = false;
 
             for (int i = 0; i < name.Length; i++)
             {
                 char c = name[i];
 
-                if (i > 0 && char.IsUpper(c))
+                if (i > 0 && (char.IsUpper(c) || (!number && char.IsNumber(c))))
                 {
                     sb.Append(' ');
-                    sb.Append(char.ToLowerInvariant(c));
+
+                    if (keepCase)
+                    {
+                        sb.Append(c);
+                    }
+                    else
+                    {
+                        sb.Append(char.ToLowerInvariant(c));
+                    }
                 }
                 else
                 {
                     sb.Append(c);
                 }
+
+                number = char.IsNumber(c);
             }
 
             return sb.ToString();
@@ -1227,6 +1240,24 @@ namespace ShareX.HelpersLib
             {
                 return false;
             }
+        }
+
+        public static bool IsMemberOfAdministratorsGroup()
+        {
+            try
+            {
+                using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+                {
+                    WindowsPrincipal principal = new WindowsPrincipal(identity);
+                    SecurityIdentifier sid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+                    return principal.UserClaims.Any(x => x.Value.Contains(sid.Value));
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
         }
 
         public static string RepeatGenerator(int count, Func<string> generator)

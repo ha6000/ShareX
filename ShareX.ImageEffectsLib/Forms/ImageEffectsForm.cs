@@ -23,12 +23,14 @@
 
 #endregion License Information (GPL v3)
 
+using Newtonsoft.Json.Serialization;
 using ShareX.HelpersLib;
 using ShareX.ImageEffectsLib.Properties;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace ShareX.ImageEffectsLib
@@ -48,6 +50,7 @@ namespace ShareX.ImageEffectsLib
         public string FilePath { get; private set; }
 
         private bool pauseUpdate;
+        private ISerializationBinder serializationBinder = new TypeNameSerializationBinder("ShareX.ImageEffectsLib", "ShareX.ImageEffectsLib");
 
         public ImageEffectsForm(Bitmap bmp, List<ImageEffectPreset> presets, int selectedPresetIndex)
         {
@@ -69,9 +72,6 @@ namespace ShareX.ImageEffectsLib
             }
 
             SelectedPresetIndex = selectedPresetIndex;
-
-            eiImageEffects.ObjectType = typeof(ImageEffectPreset);
-            eiImageEffects.SerializationBinder = new TypeNameSerializationBinder("ShareX.ImageEffectsLib", "ShareX.ImageEffectsLib");
 
             AddAllEffectsToContextMenu();
             LoadSettings();
@@ -105,7 +105,39 @@ namespace ShareX.ImageEffectsLib
 
         public void ImportImageEffect(string json)
         {
-            eiImageEffects.ImportJson(json);
+            ImageEffectPreset preset = null;
+
+            try
+            {
+                preset = JsonHelpers.DeserializeFromString<ImageEffectPreset>(json, serializationBinder);
+            }
+            catch (Exception e)
+            {
+                DebugHelper.WriteException(e);
+                e.ShowError();
+            }
+
+            if (preset != null && preset.Effects.Count > 0)
+            {
+                AddPreset(preset);
+            }
+        }
+
+        public void ImportImageEffectFile(string filePath)
+        {
+            try
+            {
+                string configJson = ImageEffectPackager.ExtractPackage(filePath, HelpersOptions.ShareXSpecialFolders["ShareXImageEffects"]);
+
+                if (!string.IsNullOrEmpty(configJson))
+                {
+                    ImportImageEffect(configJson);
+                }
+            }
+            catch (Exception ex)
+            {
+                ex.ShowError(false);
+            }
         }
 
         protected void OnImageProcessRequested(Bitmap bmp)
@@ -464,6 +496,43 @@ namespace ShareX.ImageEffectsLib
             UpdatePreview();
         }
 
+        private void ImageEffectsForm_DragEnter(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop, false))
+            {
+                string[] files = e.Data.GetData(DataFormats.FileDrop, false) as string[];
+
+                if (files != null && files.Any(x => !string.IsNullOrEmpty(x) && x.EndsWith(".sxie")))
+                {
+                    e.Effect = DragDropEffects.Copy;
+                }
+                else
+                {
+                    e.Effect = DragDropEffects.None;
+                }
+            }
+            else
+            {
+                e.Effect = DragDropEffects.None;
+            }
+        }
+
+        private void ImageEffectsForm_DragDrop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop, false))
+            {
+                string[] files = e.Data.GetData(DataFormats.FileDrop, false) as string[];
+
+                if (files != null)
+                {
+                    foreach (string filePath in files.Where(x => !string.IsNullOrEmpty(x) && x.EndsWith(".sxie")))
+                    {
+                        ImportImageEffectFile(filePath);
+                    }
+                }
+            }
+        }
+
         private void btnPresetNew_Click(object sender, EventArgs e)
         {
             AddPreset();
@@ -641,21 +710,6 @@ namespace ShareX.ImageEffectsLib
             UpdatePreview();
         }
 
-        private object eiImageEffects_ExportRequested()
-        {
-            return GetSelectedPreset();
-        }
-
-        private void eiImageEffects_ImportRequested(object obj)
-        {
-            ImageEffectPreset preset = obj as ImageEffectPreset;
-
-            if (preset != null && preset.Effects.Count > 0)
-            {
-                AddPreset(preset);
-            }
-        }
-
         private void btnPackager_Click(object sender, EventArgs e)
         {
             ImageEffectPreset preset = GetSelectedPreset();
@@ -668,7 +722,17 @@ namespace ShareX.ImageEffectsLib
                 }
                 else
                 {
-                    string json = eiImageEffects.Serialize(preset);
+                    string json = null;
+
+                    try
+                    {
+                        json = JsonHelpers.SerializeToString(preset, serializationBinder: serializationBinder);
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugHelper.WriteException(ex);
+                        ex.ShowError();
+                    }
 
                     if (!string.IsNullOrEmpty(json))
                     {
@@ -680,6 +744,11 @@ namespace ShareX.ImageEffectsLib
                     }
                 }
             }
+        }
+
+        private void btnImageEffects_Click(object sender, EventArgs e)
+        {
+            URLHelpers.OpenURL(Links.URL_IMAGE_EFFECTS);
         }
 
         private void tsmiLoadImageFromFile_Click(object sender, EventArgs e)

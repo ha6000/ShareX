@@ -42,6 +42,7 @@ namespace ShareX.ScreenCaptureLib
         // Drawing
         public Color BorderColor { get; set; } = PrimaryColor;
         public int BorderSize { get; set; } = 4;
+        public BorderStyle BorderStyle { get; set; } = BorderStyle.Solid;
         public Color FillColor { get; set; } = TransparentColor;
         public int DrawingCornerRadius { get; set; } = 3;
         public bool Shadow { get; set; } = true;
@@ -52,7 +53,7 @@ namespace ShareX.ScreenCaptureLib
         public int LineCenterPointCount { get; set; } = 1;
 
         // Arrow drawing
-        public bool ArrowHeadsBothSide { get; set; } = false;
+        public ArrowHeadDirection ArrowHeadDirection { get; set; } = ArrowHeadDirection.End;
 
         // Text (Outline) drawing
         public TextDrawingOptions TextOutlineOptions { get; set; } = new TextDrawingOptions()

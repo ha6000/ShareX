@@ -36,7 +36,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -98,9 +97,6 @@ namespace ShareX.UploadersLib
             rtbResultThumbnailURL.AddContextMenu();
             rtbResultDeletionURL.AddContextMenu();
             rtbResultErrorMessage.AddContextMenu();
-            rtbResult.AddContextMenu();
-            rtbResponseInfo.AddContextMenu();
-            rtbResponseText.AddContextMenu();
             eiCustomUploaders.ObjectType = typeof(CustomUploaderItem);
             CustomUploaderAddDestinationTypes();
             cbRequestMethod.Items.AddRange(Enum.GetNames(typeof(HttpMethod)));
@@ -165,7 +161,7 @@ namespace ShareX.UploadersLib
         private void CustomUploaderLoad(CustomUploaderItem uploader)
         {
             txtName.Text = uploader.Name ?? "";
-            txtName.SetWatermark(URLHelpers.GetHostName(uploader.RequestURL));
+            txtName.SetWatermark(URLHelpers.GetHostName(uploader.RequestURL) ?? "");
             CustomUploaderSetDestinationType(uploader.DestinationType);
 
             cbRequestMethod.SelectedIndex = (int)uploader.RequestMethod;
@@ -232,10 +228,9 @@ namespace ShareX.UploadersLib
 
         private void CustomUploaderUpdateStates()
         {
-            btnRemove.Enabled = btnDuplicate.Enabled = txtName.Enabled = mbDestinationType.Enabled =
-                tcCustomUploader.Enabled = CustomUploaderCheck(lbCustomUploaderList.SelectedIndex);
+            btnRemove.Enabled = btnDuplicate.Enabled = pMain.Visible = CustomUploaderCheck(lbCustomUploaderList.SelectedIndex);
 
-            btnClearUploaders.Enabled = tsmiExportAll.Enabled = cbImageUploader.Enabled =
+            tsmiExportAll.Enabled = tsmiClearUploaders.Enabled = cbImageUploader.Enabled =
                 btnImageUploaderTest.Enabled = cbTextUploader.Enabled = btnTextUploaderTest.Enabled =
                 cbFileUploader.Enabled = btnFileUploaderTest.Enabled = cbURLShortener.Enabled =
                 btnURLShortenerTest.Enabled = cbURLSharingService.Enabled = btnURLSharingServiceTest.Enabled =
@@ -294,6 +289,20 @@ namespace ShareX.UploadersLib
             CustomUploaderLoad(CustomUploaderItem.Init());
         }
 
+        private void CustomUploaderSerialize(CustomUploaderItem cui, string folderPath)
+        {
+            try
+            {
+                string filePath = Path.Combine(folderPath, cui.GetFileName());
+                JsonHelpers.SerializeToFile(cui, filePath, DefaultValueHandling.Ignore, NullValueHandling.Ignore);
+            }
+            catch (Exception e)
+            {
+                DebugHelper.WriteException(e);
+                MessageBox.Show(Resources.ExportFailed + "\n\n" + e, "ShareX - " + "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private void CustomUploaderExportAll()
         {
             if (Config.CustomUploadersList != null && Config.CustomUploadersList.Count > 0)
@@ -304,9 +313,7 @@ namespace ShareX.UploadersLib
                     {
                         foreach (CustomUploaderItem cui in Config.CustomUploadersList)
                         {
-                            string json = eiCustomUploaders.Serialize(cui);
-                            string filePath = Path.Combine(fsd.FileName, cui.GetFileName());
-                            File.WriteAllText(filePath, json, Encoding.UTF8);
+                            CustomUploaderSerialize(cui, fsd.FileName);
                         }
                     }
                 }
@@ -328,16 +335,12 @@ namespace ShareX.UploadersLib
                     {
                         foreach (string filePath in files)
                         {
-                            CustomUploaderItem cui = JsonHelpers.DeserializeFromFilePath<CustomUploaderItem>(filePath);
+                            CustomUploaderItem cui = JsonHelpers.DeserializeFromFile<CustomUploaderItem>(filePath);
 
                             if (cui != null)
                             {
                                 cui.CheckBackwardCompatibility();
-
-                                string json = eiCustomUploaders.Serialize(cui);
-                                string newFilePath = Path.Combine(folderPath, cui.GetFileName());
-                                File.WriteAllText(newFilePath, json, Encoding.UTF8);
-
+                                CustomUploaderSerialize(cui, folderPath);
                                 updated++;
                             }
                         }
@@ -366,10 +369,11 @@ namespace ShareX.UploadersLib
                 CustomUploaderUpdateList();
             }
 
-#if DEBUG
-            tsmiExportAll.Visible = true;
-            tsmiUpdateFolder.Visible = true;
-#endif
+            if (HelpersOptions.DevMode)
+            {
+                tsmiExportAll.Visible = true;
+                tsmiUpdateFolder.Visible = true;
+            }
 
             CustomUploaderClearFields();
 
@@ -544,8 +548,7 @@ namespace ShareX.UploadersLib
                 }
                 else
                 {
-                    mbDestinationType.Text = string.Join(", ", uploader.DestinationType.GetFlags<CustomUploaderDestinationType>().
-                        Select(x => x.GetLocalizedDescription()));
+                    mbDestinationType.Text = string.Join(", ", uploader.DestinationType.GetFlags().Select(x => x.GetLocalizedDescription()));
                 }
             }
         }
@@ -660,9 +663,6 @@ namespace ShareX.UploadersLib
 
             btnImageUploaderTest.Enabled = btnTextUploaderTest.Enabled = btnFileUploaderTest.Enabled =
                 btnURLShortenerTest.Enabled = btnURLSharingServiceTest.Enabled = false;
-            rtbResult.ResetText();
-            rtbResponseText.ResetText();
-            rtbResponseInfo.ResetText();
             lbCustomUploaderList.SelectedIndex = index;
 
             CustomUploaderItem item = Config.CustomUploadersList[index];
@@ -718,91 +718,11 @@ namespace ShareX.UploadersLib
             {
                 if (result != null)
                 {
-                    StringBuilder sbResult = new StringBuilder();
-
-                    if (((type == CustomUploaderDestinationType.ImageUploader || type == CustomUploaderDestinationType.TextUploader ||
-                        type == CustomUploaderDestinationType.FileUploader) && !string.IsNullOrEmpty(result.URL)) ||
-                        (type == CustomUploaderDestinationType.URLShortener && !string.IsNullOrEmpty(result.ShortenedURL)) ||
-                        (type == CustomUploaderDestinationType.URLSharingService && !result.IsError && !string.IsNullOrEmpty(result.URL)))
-                    {
-                        if (!string.IsNullOrEmpty(result.ShortenedURL))
-                        {
-                            sbResult.AppendLine("Shortened URL: " + result.ShortenedURL);
-                        }
-
-                        if (!string.IsNullOrEmpty(result.URL))
-                        {
-                            sbResult.AppendLine("URL: " + result.URL);
-                        }
-
-                        if (!string.IsNullOrEmpty(result.ThumbnailURL))
-                        {
-                            sbResult.AppendLine("Thumbnail URL: " + result.ThumbnailURL);
-                        }
-
-                        if (!string.IsNullOrEmpty(result.DeletionURL))
-                        {
-                            sbResult.AppendLine("Deletion URL: " + result.DeletionURL);
-                        }
-                    }
-                    else if (result.IsError)
-                    {
-                        sbResult.AppendLine(result.ErrorsToString());
-                    }
-                    else
-                    {
-                        sbResult.AppendLine(Resources.UploadersConfigForm_TestCustomUploader_Error__Result_is_empty_);
-                    }
-
-                    rtbResult.Text = sbResult.ToString();
-
-                    if (result.ResponseInfo != null)
-                    {
-                        rtbResponseText.ResetText();
-                        rtbResponseText.Text = result.ResponseInfo.ResponseText;
-
-                        UpdateResponseInfoTextBox(result.ResponseInfo, true);
-                    }
-
-                    tcCustomUploader.SelectedTab = tpTest;
+                    ResponseForm.ShowInstance(result);
                 }
 
                 btnImageUploaderTest.Enabled = btnTextUploaderTest.Enabled = btnFileUploaderTest.Enabled =
                     btnURLShortenerTest.Enabled = btnURLSharingServiceTest.Enabled = true;
-            }
-        }
-
-        private void UpdateResponseInfoTextBox(ResponseInfo responseInfo, bool includeResponseText)
-        {
-            rtbResponseInfo.ResetText();
-
-            rtbResponseInfo.SetFontBold();
-            rtbResponseInfo.AppendText("Status code:\r\n");
-            rtbResponseInfo.SetFontRegular();
-            rtbResponseInfo.AppendText($"({(int)responseInfo.StatusCode}) {responseInfo.StatusDescription}");
-
-            if (!string.IsNullOrEmpty(responseInfo.ResponseURL))
-            {
-                rtbResponseInfo.SetFontBold();
-                rtbResponseInfo.AppendText("\r\n\r\nResponse URL:\r\n");
-                rtbResponseInfo.SetFontRegular();
-                rtbResponseInfo.AppendText(responseInfo.ResponseURL);
-            }
-
-            if (responseInfo.Headers != null && responseInfo.Headers.Count > 0)
-            {
-                rtbResponseInfo.SetFontBold();
-                rtbResponseInfo.AppendText("\r\n\r\nHeaders:\r\n");
-                rtbResponseInfo.SetFontRegular();
-                rtbResponseInfo.AppendText(responseInfo.Headers.ToString().TrimEnd('\r', '\n'));
-            }
-
-            if (includeResponseText && !string.IsNullOrEmpty(responseInfo.ResponseText))
-            {
-                rtbResponseInfo.SetFontBold();
-                rtbResponseInfo.AppendText("\r\n\r\nResponse text:\r\n");
-                rtbResponseInfo.SetFontRegular();
-                rtbResponseInfo.AppendText(responseInfo.ResponseText);
             }
         }
 
@@ -905,7 +825,7 @@ namespace ShareX.UploadersLib
                 {
                     foreach (string filePath in files.Where(x => !string.IsNullOrEmpty(x) && x.EndsWith(".sxcu")))
                     {
-                        CustomUploaderItem cui = JsonHelpers.DeserializeFromFilePath<CustomUploaderItem>(filePath);
+                        CustomUploaderItem cui = JsonHelpers.DeserializeFromFile<CustomUploaderItem>(filePath);
 
                         if (cui != null)
                         {
@@ -970,15 +890,6 @@ namespace ShareX.UploadersLib
             }
         }
 
-        private void btnCustomUploaderClearUploaders_Click(object sender, EventArgs e)
-        {
-            if (MessageBox.Show(Resources.UploadersConfigForm_Remove_all_custom_uploaders_Confirmation, "ShareX",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-            {
-                CustomUploaderClearUploaders();
-            }
-        }
-
         private object eiCustomUploaders_ExportRequested()
         {
             CustomUploaderItem uploader = CustomUploaderGetSelected();
@@ -1027,6 +938,15 @@ namespace ShareX.UploadersLib
         private void tsmiCustomUploaderExamples_Click(object sender, EventArgs e)
         {
             URLHelpers.OpenURL(Links.URL_CUSTOM_UPLOADERS);
+        }
+
+        private void tsmiClearUploaders_Click(object sender, EventArgs e)
+        {
+            if (MessageBox.Show(Resources.UploadersConfigForm_Remove_all_custom_uploaders_Confirmation, "ShareX",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            {
+                CustomUploaderClearUploaders();
+            }
         }
 
         private void tsmiCustomUploaderExportAll_Click(object sender, EventArgs e)
@@ -1302,54 +1222,6 @@ namespace ShareX.UploadersLib
             CustomUploaderItem uploader = CustomUploaderGetSelected();
             if (uploader != null) uploader.ErrorMessage = rtbResultErrorMessage.Text;
             CustomUploaderSyntaxHighlight(rtbResultErrorMessage);
-        }
-
-        private void txtCustomUploaderLog_LinkClicked(object sender, LinkClickedEventArgs e)
-        {
-            URLHelpers.OpenURL(e.LinkText);
-        }
-
-        private void tsbCustomUploaderJSONFormat_Click(object sender, EventArgs e)
-        {
-            string response = rtbResponseText.Text;
-            if (!string.IsNullOrEmpty(response))
-            {
-                try
-                {
-                    response = Helpers.JSONFormat(response, Formatting.Indented);
-                    rtbResponseText.Text = response;
-                }
-                catch
-                {
-                    MessageBox.Show("Formatting failed.", "ShareX", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-        }
-
-        private void tsbCustomUploaderXMLFormat_Click(object sender, EventArgs e)
-        {
-            string response = rtbResponseText.Text;
-            if (!string.IsNullOrEmpty(response))
-            {
-                try
-                {
-                    response = Helpers.XMLFormat(response);
-                    rtbResponseText.Text = response;
-                }
-                catch
-                {
-                    MessageBox.Show("Formatting failed.", "ShareX", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-        }
-
-        private void tsbCustomUploaderCopyResponseText_Click(object sender, EventArgs e)
-        {
-            string response = rtbResponseText.Text;
-            if (!string.IsNullOrEmpty(response))
-            {
-                ClipboardHelpers.CopyText(response);
-            }
         }
 
         private void cbCustomUploaderImageUploader_SelectedIndexChanged(object sender, EventArgs e)

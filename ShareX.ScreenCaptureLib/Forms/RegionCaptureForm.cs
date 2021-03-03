@@ -377,6 +377,7 @@ namespace ShareX.ScreenCaptureLib
 
                 if (IsAnnotationMode && ShapeManager.ToolbarCreated)
                 {
+                    ShapeManager.UpdateMenuMaxWidth(ClientSize.Width);
                     ShapeManager.UpdateMenuPosition();
                 }
             }
@@ -1080,7 +1081,14 @@ namespace ShareX.ScreenCaptureLib
             {
                 Color color = ShapeManager.GetCurrentColor();
 
-                if (Mode != RegionCaptureMode.ScreenColorPicker && !string.IsNullOrEmpty(Options.CustomInfoText))
+                if (Mode == RegionCaptureMode.ScreenColorPicker)
+                {
+                    if (!string.IsNullOrEmpty(Options.ScreenColorPickerInfoText))
+                    {
+                        return CodeMenuEntryPixelInfo.Parse(Options.ScreenColorPickerInfoText, color, CurrentPosition);
+                    }
+                }
+                else if (!string.IsNullOrEmpty(Options.CustomInfoText))
                 {
                     return CodeMenuEntryPixelInfo.Parse(Options.CustomInfoText, color, CurrentPosition);
                 }
@@ -1426,8 +1434,7 @@ namespace ShareX.ScreenCaptureLib
                 {
                     ImageFilePath = imageFilePath;
                     UpdateTitle();
-                    // TODO: Translate
-                    ShapeManager.ShowMenuTooltip("Image saved");
+                    ShapeManager.ShowMenuTooltip(Resources.ImageSaved);
                 }
             }
         }
@@ -1444,8 +1451,7 @@ namespace ShareX.ScreenCaptureLib
                 {
                     ImageFilePath = imageFilePath;
                     UpdateTitle();
-                    // TODO: Translate
-                    ShapeManager.ShowMenuTooltip("Image saved");
+                    ShapeManager.ShowMenuTooltip(Resources.ImageSavedAs);
                 }
             }
         }
@@ -1457,8 +1463,7 @@ namespace ShareX.ScreenCaptureLib
                 Bitmap bmp = ReceiveImageForTask();
 
                 CopyImageRequested(bmp);
-                // TODO: Translate
-                ShapeManager.ShowMenuTooltip("Image copied");
+                ShapeManager.ShowMenuTooltip(Resources.ImageCopied);
             }
         }
 
@@ -1469,8 +1474,7 @@ namespace ShareX.ScreenCaptureLib
                 Bitmap bmp = ReceiveImageForTask();
 
                 UploadImageRequested(bmp);
-                // TODO: Translate
-                ShapeManager.ShowMenuTooltip("Image uploading");
+                ShapeManager.ShowMenuTooltip(Resources.ImageUploading);
             }
         }
 

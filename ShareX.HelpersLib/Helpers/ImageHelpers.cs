@@ -1972,7 +1972,7 @@ namespace ShareX.HelpersLib
 
         public static void DrawColorPickerIcon(Graphics g, Color color, Rectangle rect, int holeSize = 0)
         {
-            if (color.A < 255)
+            if (color.IsTransparent())
             {
                 using (Image checker = CreateCheckerPattern(rect.Width / 2, rect.Height / 2))
                 {
@@ -2268,6 +2268,44 @@ namespace ShareX.HelpersLib
         public static Size ApplyAspectRatio(Size size, Bitmap bmp)
         {
             return ApplyAspectRatio(size.Width, size.Height, bmp);
+        }
+
+        public static Bitmap NonIndexedBitmap(Bitmap bmp)
+        {
+            if (bmp != null && bmp.PixelFormat.HasFlag(PixelFormat.Indexed))
+            {
+                using (bmp)
+                {
+                    return bmp.Clone(new Rectangle(0, 0, bmp.Width, bmp.Height), PixelFormat.Format32bppArgb);
+                }
+            }
+
+            return bmp;
+        }
+
+        public static Bitmap DrawGrip(Color color, Color shadow)
+        {
+            int size = 16;
+            Bitmap bmp = new Bitmap(size, size);
+
+            using (Graphics g = Graphics.FromImage(bmp))
+            using (SolidBrush brush = new SolidBrush(color))
+            using (SolidBrush shadowBrush = new SolidBrush(shadow))
+            {
+                int x = size / 2;
+                int boxSize = 2;
+
+                for (int i = 0; i < 4; i++)
+                {
+                    g.FillRectangle(shadowBrush, x - boxSize, (i * 4) + 2, boxSize, boxSize);
+                    g.FillRectangle(brush, x - boxSize - 1, (i * 4) + 1, boxSize, boxSize);
+
+                    g.FillRectangle(shadowBrush, x + 2, (i * 4) + 2, boxSize, boxSize);
+                    g.FillRectangle(brush, x + 1, (i * 4) + 1, boxSize, boxSize);
+                }
+            }
+
+            return bmp;
         }
     }
 }

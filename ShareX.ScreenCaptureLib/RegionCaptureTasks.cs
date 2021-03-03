@@ -201,13 +201,15 @@ namespace ShareX.ScreenCaptureLib
             {
                 return new RegionCaptureOptions()
                 {
+                    DetectControls = options.DetectControls,
                     SnapSizes = options.SnapSizes,
                     ShowMagnifier = options.ShowMagnifier,
                     UseSquareMagnifier = options.UseSquareMagnifier,
                     MagnifierPixelCount = options.MagnifierPixelCount,
                     MagnifierPixelSize = options.MagnifierPixelSize,
                     ShowCrosshair = options.ShowCrosshair,
-                    AnnotationOptions = options.AnnotationOptions
+                    AnnotationOptions = options.AnnotationOptions,
+                    ScreenColorPickerInfoText = options.ScreenColorPickerInfoText
                 };
             }
         }

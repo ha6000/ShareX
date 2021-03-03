@@ -590,8 +590,10 @@ namespace ShareX
 
         public static Bitmap ApplyImageEffects(Bitmap bmp, TaskSettingsImage taskSettingsImage)
         {
-            if (bmp != null && !bmp.PixelFormat.HasFlag(PixelFormat.Indexed))
+            if (bmp != null)
             {
+                bmp = ImageHelpers.NonIndexedBitmap(bmp);
+
                 if (taskSettingsImage.ShowImageEffectsWindowAfterCapture)
                 {
                     using (ImageEffectsForm imageEffectsForm = new ImageEffectsForm(bmp, taskSettingsImage.ImageEffectPresets,
@@ -644,6 +646,11 @@ namespace ShareX
 
         public static Icon GetProgressIcon(int percentage)
         {
+            return GetProgressIcon(percentage, Color.FromArgb(16, 116, 193));
+        }
+
+        public static Icon GetProgressIcon(int percentage, Color color)
+        {
             percentage = percentage.Clamp(0, 99);
 
             Size size = SystemInformation.SmallIconSize;
@@ -654,7 +661,7 @@ namespace ShareX
 
                 if (y > 0)
                 {
-                    using (Brush brush = new SolidBrush(Color.FromArgb(16, 116, 193)))
+                    using (Brush brush = new SolidBrush(color))
                     {
                         g.FillRectangle(brush, 0, size.Height - 1 - y, size.Width, y);
                     }
@@ -798,6 +805,7 @@ namespace ShareX
         public static void ShowScreenColorPickerDialog(TaskSettings taskSettings = null)
         {
             if (taskSettings == null) taskSettings = TaskSettings.GetDefaultTaskSettings();
+            taskSettings.CaptureSettings.SurfaceOptions.ScreenColorPickerInfoText = taskSettings.ToolsSettings.ScreenColorPickerInfoText;
 
             RegionCaptureTasks.ShowScreenColorPickerDialog(taskSettings.CaptureSettings.SurfaceOptions);
         }
@@ -805,18 +813,30 @@ namespace ShareX
         public static void OpenScreenColorPicker(TaskSettings taskSettings = null)
         {
             if (taskSettings == null) taskSettings = TaskSettings.GetDefaultTaskSettings();
+            taskSettings.CaptureSettings.SurfaceOptions.ScreenColorPickerInfoText = taskSettings.ToolsSettings.ScreenColorPickerInfoText;
 
             PointInfo pointInfo = RegionCaptureTasks.GetPointInfo(taskSettings.CaptureSettings.SurfaceOptions);
 
             if (pointInfo != null)
             {
-                string text = CodeMenuEntryPixelInfo.Parse(taskSettings.ToolsSettings.ScreenColorPickerFormat, pointInfo.Color, pointInfo.Position);
+                string input;
 
-                ClipboardHelpers.CopyText(text);
-
-                if (!taskSettings.AdvancedSettings.DisableNotifications && taskSettings.GeneralSettings.PopUpNotification != PopUpNotificationType.None)
+                if (Control.ModifierKeys == Keys.Control)
                 {
-                    ShowBalloonTip(string.Format(Resources.TaskHelpers_OpenQuickScreenColorPicker_Copied_to_clipboard___0_, text), ToolTipIcon.Info, 3000);
+                    input = taskSettings.ToolsSettings.ScreenColorPickerFormatCtrl;
+                }
+                else
+                {
+                    input = taskSettings.ToolsSettings.ScreenColorPickerFormat;
+                }
+
+                if (!string.IsNullOrEmpty(input))
+                {
+                    string text = CodeMenuEntryPixelInfo.Parse(input, pointInfo.Color, pointInfo.Position);
+                    ClipboardHelpers.CopyText(text);
+
+                    ShowNotificationTip(string.Format(Resources.TaskHelpers_OpenQuickScreenColorPicker_Copied_to_clipboard___0_, text),
+                        "ShareX - " + Resources.ScreenColorPicker);
                 }
             }
         }
@@ -902,6 +922,12 @@ namespace ShareX
             thumbnailerForm.Show();
         }
 
+        public static void OpenInspectWindow()
+        {
+            InspectWindowForm inspectWindowForm = new InspectWindowForm();
+            inspectWindowForm.Show();
+        }
+
         public static void OpenClipboardViewer()
         {
             ClipboardViewerForm clipboardViewerForm = new ClipboardViewerForm();
@@ -961,6 +987,8 @@ namespace ShareX
         {
             if (bmp != null)
             {
+                bmp = ImageHelpers.NonIndexedBitmap(bmp);
+
                 using (bmp)
                 {
                     RegionCaptureMode mode = taskMode ? RegionCaptureMode.TaskEditor : RegionCaptureMode.Editor;
@@ -1061,21 +1089,16 @@ namespace ShareX
 
                 if (bmp != null)
                 {
-                    if (bmp.PixelFormat.HasFlag(PixelFormat.Indexed))
-                    {
-                        MessageBox.Show("Unsupported pixel format: " + bmp.PixelFormat, "ShareX - Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                    else
-                    {
-                        if (taskSettings == null) taskSettings = Program.DefaultTaskSettings;
+                    bmp = ImageHelpers.NonIndexedBitmap(bmp);
 
-                        using (ImageEffectsForm imageEffectsForm = new ImageEffectsForm(bmp, taskSettings.ImageSettings.ImageEffectPresets,
-                            taskSettings.ImageSettings.SelectedImageEffectPreset))
-                        {
-                            imageEffectsForm.EnableToolMode(x => UploadManager.RunImageTask(x, taskSettings), filePath);
-                            imageEffectsForm.ShowDialog();
-                            //taskSettings.ImageSettings.SelectedImageEffectPreset = imageEffectsForm.SelectedPresetIndex;
-                        }
+                    if (taskSettings == null) taskSettings = Program.DefaultTaskSettings;
+
+                    using (ImageEffectsForm imageEffectsForm = new ImageEffectsForm(bmp, taskSettings.ImageSettings.ImageEffectPresets,
+                        taskSettings.ImageSettings.SelectedImageEffectPreset))
+                    {
+                        imageEffectsForm.EnableToolMode(x => UploadManager.RunImageTask(x, taskSettings), filePath);
+                        imageEffectsForm.ShowDialog();
+                        //taskSettings.ImageSettings.SelectedImageEffectPreset = imageEffectsForm.SelectedPresetIndex;
                     }
                 }
             }
@@ -1127,7 +1150,7 @@ namespace ShareX
 #endif
         }
 
-        public static void RunShareXAsAdmin(string arguments)
+        public static void RunShareXAsAdmin(string arguments = null)
         {
             try
             {
@@ -1250,7 +1273,7 @@ namespace ShareX
 
         private static async Task AsyncOCRImage(Stream stream, string fileName, string filePath, OCROptions ocrOptions)
         {
-            ShowBalloonTip(Resources.OCRForm_AutoProcessing, ToolTipIcon.None, 3000);
+            ShowNotificationTip(Resources.OCRForm_AutoProcessing);
 
             string result = null;
 
@@ -1269,11 +1292,11 @@ namespace ShareX
                     File.WriteAllText(textPath, result, Encoding.UTF8);
                 }
 
-                ShowBalloonTip(Resources.OCRForm_AutoComplete, ToolTipIcon.None, 3000);
+                ShowNotificationTip(Resources.OCRForm_AutoComplete);
             }
             else
             {
-                ShowBalloonTip(Resources.OCRForm_AutoCompleteFail, ToolTipIcon.Warning, 3000);
+                ShowNotificationTip(Resources.OCRForm_AutoCompleteFail);
             }
         }
 
@@ -1293,7 +1316,7 @@ namespace ShareX
                             {
                                 if (twitter.ShowDialog() == DialogResult.OK && twitter.IsTweetSent)
                                 {
-                                    ShowBalloonTip(Resources.TaskHelpers_TweetMessage_Tweet_successfully_sent_, ToolTipIcon.Info, 3000);
+                                    ShowNotificationTip(Resources.TaskHelpers_TweetMessage_Tweet_successfully_sent_);
                                 }
                             }
                         });
@@ -1329,8 +1352,7 @@ namespace ShareX
             Program.HotkeyManager.ToggleHotkeys(hotkeysDisabled);
             Program.MainForm.UpdateToggleHotkeyButton();
 
-            string balloonTipText = hotkeysDisabled ? Resources.TaskHelpers_ToggleHotkeys_Hotkeys_disabled_ : Resources.TaskHelpers_ToggleHotkeys_Hotkeys_enabled_;
-            ShowBalloonTip(balloonTipText, ToolTipIcon.Info, 3000);
+            ShowNotificationTip(hotkeysDisabled ? Resources.TaskHelpers_ToggleHotkeys_Hotkeys_disabled_ : Resources.TaskHelpers_ToggleHotkeys_Hotkeys_enabled_);
 
             return hotkeysDisabled;
         }
@@ -1575,7 +1597,7 @@ namespace ShareX
                     case HotkeyType.ImageThumbnailer: return Resources.image_resize_actual;
                     case HotkeyType.VideoConverter: return Resources.camcorder_pencil;
                     case HotkeyType.VideoThumbnailer: return Resources.images_stack;
-                    case HotkeyType.TweetMessage: return Resources.Twitter;
+                    case HotkeyType.TweetMessage: return Resources.Twitter_16x16;
                     case HotkeyType.MonitorTest: return Resources.monitor;
                     // Other
                     case HotkeyType.DisableHotkeys: return Resources.keyboard__minus;
@@ -1620,7 +1642,7 @@ namespace ShareX
             {
                 try
                 {
-                    CustomUploaderItem cui = JsonHelpers.DeserializeFromFilePath<CustomUploaderItem>(filePath);
+                    CustomUploaderItem cui = JsonHelpers.DeserializeFromFile<CustomUploaderItem>(filePath);
 
                     if (cui != null)
                     {
@@ -1710,6 +1732,7 @@ namespace ShareX
                 catch (Exception e)
                 {
                     DebugHelper.WriteException(e);
+                    e.ShowError();
                 }
             }
         }
@@ -1736,9 +1759,8 @@ namespace ShareX
                     imageEffectsForm.ImportImageEffect(configJson);
                 }
 
-                // TODO: Translate
                 if (!Program.DefaultTaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.AddImageEffects) &&
-                    MessageBox.Show("Would you like to enable image effects?\r\n\r\nYou can later disable it from \"After capture tasks\" menu.",
+                    MessageBox.Show(Resources.WouldYouLikeToEnableImageEffects,
                     "ShareX", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 {
                     Program.DefaultTaskSettings.AfterCaptureJob = Program.DefaultTaskSettings.AfterCaptureJob.Add(AfterCaptureTasks.AddImageEffects);
@@ -1856,6 +1878,26 @@ namespace ShareX
                 Program.MainForm.niTray.Tag = clickAction;
                 Program.MainForm.niTray.ShowBalloonTip(timeout, title, text, icon);
             }
+        }
+
+        public static void ShowNotificationTip(string text, string title = "ShareX", int duration = -1)
+        {
+            if (duration < 0)
+            {
+                duration = (int)(Program.DefaultTaskSettings.AdvancedSettings.ToastWindowDuration * 1000);
+            }
+
+            NotificationFormConfig toastConfig = new NotificationFormConfig()
+            {
+                Duration = duration,
+                FadeDuration = (int)(Program.DefaultTaskSettings.AdvancedSettings.ToastWindowFadeDuration * 1000),
+                Placement = Program.DefaultTaskSettings.AdvancedSettings.ToastWindowPlacement,
+                Size = Program.DefaultTaskSettings.AdvancedSettings.ToastWindowSize,
+                Title = title,
+                Text = text
+            };
+
+            NotificationForm.Show(toastConfig);
         }
 
         public static bool IsUploadAllowed()
